@@ -211,6 +211,16 @@
   .table-wrap{border:1px solid var(--line); border-radius:4px; overflow:hidden; overflow-x:auto;}
   .table-footer{display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:10px;}
 
+  .table-toolbar{margin-bottom:10px;}
+  #searchFormations{
+    font-family:inherit; font-size:13px; padding:8px 12px; width:100%; max-width:360px;
+    border:1.5px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink);
+  }
+  #searchFormations:focus{outline:none; border-color:var(--ink);}
+  table.editor th[data-field]{cursor:pointer; user-select:none; white-space:nowrap;}
+  table.editor th[data-field]:hover{background:#2A3B5E;}
+  table.editor th.sorted{background:#2A3B5E;}
+
   .tbd-tag{
     display:inline-block; font-size:10.5px; color:var(--ink-soft); background:var(--line-soft);
     padding:2px 6px; border-radius:3px;
@@ -275,22 +285,13 @@
 
   <section class="block">
     <h2 class="block-title">Tableau des formations</h2>
-    <p class="block-note">Modifiez un champ directement dans le tableau : la frise et le calendrier se mettent à jour instantanément. Les dates laissées vides sont traitées comme « à déterminer ».</p>
+    <p class="block-note">Triées par date par défaut — clique un en-tête de colonne pour trier autrement, ou cherche un mot-clé ou un code ci-dessous. Les dates laissées vides sont traitées comme « à déterminer ».</p>
+    <div class="table-toolbar">
+      <input type="search" id="searchFormations" placeholder="Rechercher par mot, lieu ou code…">
+    </div>
     <div class="table-wrap">
       <table class="editor" id="formTable">
-        <thead>
-          <tr>
-            <th style="width:34px;">N°</th>
-            <th style="width:80px;">Code</th>
-            <th>Formation</th>
-            <th style="width:160px;">Type</th>
-            <th style="width:220px;">Lieu</th>
-            <th style="width:120px;">Début</th>
-            <th style="width:120px;">Fin</th>
-            <th style="width:200px;">Remarques</th>
-            <th style="width:34px;"></th>
-          </tr>
-        </thead>
+        <thead id="formHead"></thead>
         <tbody id="formBody"></tbody>
       </table>
     </div>
@@ -349,6 +350,9 @@
     : null;
 
   let unlocked = false;
+  let sortField = 'debut';
+  let sortDir = 'asc';
+  let searchQuery = '';
   let savingLocallyUntil = 0; // ignore les echos temps-reel juste apres notre propre sauvegarde
 
   const TYPE_COLORS = {
@@ -744,10 +748,76 @@
       `<option value="${k}" ${k===selected?'selected':''}>${TYPE_LABELS[k]}</option>`).join('');
   }
 
+  // ---------------------------------------------------------------
+  // Tri & recherche
+  // ---------------------------------------------------------------
+  const FORM_COLUMNS = [
+    {field:'code', label:'Code', width:80},
+    {field:'titre', label:'Formation', width:null},
+    {field:'type', label:'Type', width:160},
+    {field:'lieu', label:'Lieu', width:220},
+    {field:'debut', label:'Début', width:120},
+    {field:'fin', label:'Fin', width:120},
+    {field:'remarques', label:'Remarques', width:200}
+  ];
+
+  function matchesSearch(f, q){
+    if(!q) return true;
+    const hay = [f.code, f.titre, f.lieu, TYPE_LABELS[f.type]||f.type, f.remarques]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  }
+
+  function compareValues(a, b, field, dir){
+    const va = a[field], vb = b[field];
+    const aEmpty = va===undefined || va===null || va==='';
+    const bEmpty = vb===undefined || vb===null || vb==='';
+    if(aEmpty && bEmpty) return 0;
+    if(aEmpty) return 1;   // les dates/valeurs vides vont toujours en dernier
+    if(bEmpty) return -1;
+    let cmp;
+    if(typeof va === 'number' && typeof vb === 'number'){
+      cmp = va - vb;
+    } else {
+      cmp = String(va).localeCompare(String(vb), 'fr', {numeric:true, sensitivity:'base'});
+    }
+    return dir==='asc' ? cmp : -cmp;
+  }
+
+  function getVisibleFormations(){
+    const q = searchQuery.trim().toLowerCase();
+    return formations
+      .filter(f => matchesSearch(f, q))
+      .sort((a,b) => compareValues(a, b, sortField, sortDir));
+  }
+
+  function renderFormHeader(){
+    const thead = document.getElementById('formHead');
+    let html = '<tr><th style="width:34px;">N°</th>';
+    FORM_COLUMNS.forEach(col=>{
+      const active = sortField===col.field;
+      const arrow = active ? (sortDir==='asc' ? ' ▲' : ' ▼') : '';
+      html += `<th${col.width?` style="width:${col.width}px;"`:''} data-field="${col.field}" class="${active?'sorted':''}">${col.label}${arrow}</th>`;
+    });
+    html += '<th style="width:34px;"></th></tr>';
+    thead.innerHTML = html;
+    thead.querySelectorAll('th[data-field]').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const f = th.dataset.field;
+        if(sortField===f){ sortDir = sortDir==='asc' ? 'desc' : 'asc'; }
+        else { sortField = f; sortDir = 'asc'; }
+        renderFormTable();
+      });
+    });
+  }
+
   function renderFormTable(){
+    renderFormHeader();
     const body = document.getElementById('formBody');
     body.innerHTML = '';
-    formations.forEach((f, idx)=>{
+    const view = getVisibleFormations();
+    view.forEach(f=>{
+      const idx = formations.indexOf(f);
       const tr = document.createElement('tr');
       tr.dataset.n = f.n;
       tr.innerHTML = `
@@ -780,7 +850,11 @@
       });
       body.appendChild(tr);
     });
-    document.getElementById('formCount').textContent = `${formations.length} formation${formations.length>1?'s':''}`;
+    const total = formations.length;
+    const shown = view.length;
+    document.getElementById('formCount').textContent = searchQuery.trim()
+      ? `${shown} formation${shown>1?'s':''} sur ${total}`
+      : `${total} formation${total>1?'s':''}`;
   }
 
   function renderVacTable(){
@@ -826,6 +900,10 @@
   // ---------------------------------------------------------------
   // Boutons
   // ---------------------------------------------------------------
+  document.getElementById('searchFormations').addEventListener('input', (e)=>{
+    searchQuery = e.target.value;
+    renderFormTable();
+  });
   document.getElementById('btnAddFormation').addEventListener('click', ()=>{
     if(!ensureUnlocked()) return;
     formations.push({n:nextN(), code:'', titre:'Nouvelle formation', type:'AFZ', lieu:'', debut:'', fin:'', remarques:''});
