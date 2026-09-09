@@ -640,6 +640,24 @@
     }
   }
 
+  async function deleteFromGoogleCalendar(f){
+    if(!googleAccessToken || !f.gcalEventId || f.gcalEventId === 'skip-legacy') return;
+    try{
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${f.gcalEventId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${googleAccessToken}` }
+      });
+      // 204 = supprimé ; 404/410 = déjà absent côté Google, on considère que c'est bon
+      if(!res.ok && res.status!==404 && res.status!==410){
+        throw new Error('Erreur suppression Google Agenda (code ' + res.status + ')');
+      }
+      toast("Événement retiré de Google Agenda");
+    }catch(err){
+      console.error(err);
+      toast("Impossible de supprimer l'événement dans Google Agenda");
+    }
+  }
+
   function scheduleGcalSync(f){
     clearTimeout(gcalTimers.get(f.n));
     gcalTimers.set(f.n, setTimeout(()=>{
@@ -979,6 +997,14 @@
       });
       tr.querySelector('.del-btn').addEventListener('click', ()=>{
         if(!ensureUnlocked()) return;
+        const hasGcalEvent = f.gcalEventId && f.gcalEventId !== 'skip-legacy';
+        if(hasGcalEvent){
+          if(googleAccessToken){
+            deleteFromGoogleCalendar(f);
+          } else if(!confirm("Cette formation a un événement dans Google Agenda, mais tu n'es pas connecté : il ne sera pas supprimé automatiquement là-bas. Supprimer quand même du tableau ?")){
+            return;
+          }
+        }
         formations.splice(idx,1);
         renderAll();
         scheduleSave();
