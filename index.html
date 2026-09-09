@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
 <style>
   :root{
     --bg:#FBF9F4;
@@ -104,6 +105,15 @@
   .btn.primary{background:var(--ink); color:var(--bg);}
   .btn.primary:hover{opacity:.85; background:var(--ink);}
   .btn.small{padding:4px 10px; font-size:11.5px;}
+  .btn.google-on{background:#3F7D6B; color:#fff; border-color:#3F7D6B;}
+
+  .gcal-btn{
+    font-family:inherit; font-size:11px; font-weight:500; border:1px solid var(--line);
+    background:var(--paper); color:var(--ink-soft); padding:4px 8px; border-radius:999px; cursor:pointer;
+    white-space:nowrap;
+  }
+  .gcal-btn:hover{border-color:var(--ink); color:var(--ink);}
+  .gcal-btn.synced{background:#EAF2EE; border-color:#3F7D6B; color:#2E5B4E;}
 
   main{padding:26px clamp(16px,4vw,48px) 0;}
   section.block{margin-bottom:46px;}
@@ -271,6 +281,7 @@
   <div class="actions">
     <span class="status" id="status"><i class="dot"></i><span id="statusText">Connexion…</span></span>
     <button class="btn small" id="btnReload">Recharger</button>
+    <button class="btn small" id="btnGoogle">📅 Connecter Google Agenda</button>
   </div>
 </div>
 
@@ -342,12 +353,21 @@
   const SUPABASE_URL = "https://dwmhdjdugohpvrpduvou.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_11NZx-CbG4UuXQ576DifrQ_7zeAJm2t";
   const EDIT_PASSWORD = "ZESE2027";
+
+  // À remplacer par ton propre Client ID Google (Google Cloud Console)
+  const GOOGLE_CLIENT_ID = "VOTRE-CLIENT-ID.apps.googleusercontent.com";
   // ================================================================
 
   const CONFIGURED = !SUPABASE_URL.includes("VOTRE-PROJET") && !SUPABASE_ANON_KEY.includes("VOTRE-CLE");
   const sb = CONFIGURED && window.supabase
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
+
+  const GOOGLE_CONFIGURED = !GOOGLE_CLIENT_ID.includes("VOTRE-CLIENT-ID");
+  let googleAccessToken = null;
+  let googleTokenClient = null;
+  const gcalTimers = new Map();
+  let gcalMigrated = false;
 
   let unlocked = false;
   let sortField = 'debut';
@@ -390,24 +410,24 @@
   const WEEKDAYS_FR = ["Lu","Ma","Me","Je","Ve","Sa","Di"];
 
   const DEFAULT_FORMATIONS = [
-    {n:1,  code:23853, titre:"[2D] Du problème technique au projet créatif : enseigner la technologie par projets", type:"AFIZ", lieu:"Lycée français de Riga", debut:"2026-10-08", fin:"2026-10-09", remarques:""},
-    {n:2,  code:23877, titre:"Le métier de CPE au quotidien : comprendre, agir et coordonner efficacement", type:"AFIZ", lieu:"Lycée Francais de Turin", debut:"2027-01-25", fin:"2027-01-26", remarques:""},
-    {n:3,  code:23895, titre:"L'IA au service des personnels administratifs — Niveau 2", type:"AFZ", lieu:"Lycée Chateaubriand", debut:"2027-01-11", fin:"2027-01-12", remarques:""},
-    {n:4,  code:26336, titre:"Enseigner la philosophie en terminale : programme, nouveaux auteurs et IA", type:"AFIZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-02-01", fin:"2027-02-03", remarques:""},
-    {n:5,  code:25339, titre:"[2D] Enseigner la technologie et la physique-chimie au collège", type:"AFZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-03-08", fin:"2027-03-09", remarques:""},
-    {n:6,  code:23894, titre:"L'IA au service des personnels administratifs — Niveau 1", type:"AFZ", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"2027-03-22", fin:"2027-03-23", remarques:""},
-    {n:7,  code:23936, titre:"[2D] Repenser les modalités d'apprentissage avec le numérique : pratiques flexibles, inclusives, efficaces", type:"AFZ", lieu:"Lycée Pierre Loti", debut:"2027-04-05", fin:"2027-04-06", remarques:""},
-    {n:8,  code:26989, titre:"Développer les compétences éducatives des assistants d'éducation et pédagogiques", type:"AFIZ", lieu:"Lycée Français de Vienne", debut:"2026-11-19", fin:"2026-11-20", remarques:""},
-    {n:9,  code:26474, titre:"Cybersécurité et réseaux dans les établissements français à l'étranger", type:"AFIZ", lieu:"à déterminer", debut:"", fin:"", remarques:""},
-    {n:10, code:22550, titre:"[EFCHYPRE • 2D] Regroupement inter-CVL Zone Europe du Sud-Est", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-09-28", fin:"2026-09-29", remarques:""},
-    {n:11, code:26588, titre:"[EFCHYPRE] Climat scolaire et programme pHARe : prévention et traitement du harcèlement", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-11-09", fin:"2026-11-10", remarques:""},
-    {n:12, code:26587, titre:"[EFCHYPRE] Technologie et numérique : Fab Lab et usages pédagogiques du numérique et de l'IA", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2027-02-04", fin:"2027-02-05", remarques:""},
-    {n:13, code:26698, titre:"[buc-ADN] Formation à l'utilisation d'un fablab", type:"AFE", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"", fin:"", remarques:""},
-    {n:14, code:25983, titre:"[LFISV] AFE Technologie pour le projet Innov Campus", type:"AFE", lieu:"Lycée français international Simone-Veil, Düsseldorf", debut:"2026-11-19", fin:"2026-11-20", remarques:""},
-    {n:15, code:27748, titre:"[Jules Verne, Riga] Structurer les projets en technologie : interdisciplinarité, interdegrés, robotique", type:"AFE", lieu:"Lycée Français International Jules Verne, Riga", debut:"", fin:"", remarques:""},
-    {n:16, code:23678, titre:"Regroupement 1 des enseignants formateurs des 1er et 2d degrés de la ZECO", type:"Formation/Seminaire", lieu:"Lycée francais de Bratislava", debut:"2026-12-02", fin:"2026-12-03", remarques:""},
-    {n:17, code:25322, titre:"Les outils numériques des formateurs : Magistère 2, ÉLÉA, IA", type:"Formation/Seminaire", lieu:"Bruxelles", debut:"2026-09-17", fin:"2026-09-18", remarques:""},
-    {n:18, code:25397, titre:"Séminaire des EF2D de Technologie", type:"Formation/Seminaire", lieu:"Siège AEFE, Paris", debut:"2026-12-02", fin:"2026-12-04", remarques:""}
+    {n:1,  code:23853, titre:"[2D] Du problème technique au projet créatif : enseigner la technologie par projets", type:"AFIZ", lieu:"Lycée français de Riga", debut:"2026-10-08", fin:"2026-10-09", remarques:"", gcalEventId:"skip-legacy"},
+    {n:2,  code:23877, titre:"Le métier de CPE au quotidien : comprendre, agir et coordonner efficacement", type:"AFIZ", lieu:"Lycée Francais de Turin", debut:"2027-01-25", fin:"2027-01-26", remarques:"", gcalEventId:"skip-legacy"},
+    {n:3,  code:23895, titre:"L'IA au service des personnels administratifs — Niveau 2", type:"AFZ", lieu:"Lycée Chateaubriand", debut:"2027-01-11", fin:"2027-01-12", remarques:"", gcalEventId:"skip-legacy"},
+    {n:4,  code:26336, titre:"Enseigner la philosophie en terminale : programme, nouveaux auteurs et IA", type:"AFIZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-02-01", fin:"2027-02-03", remarques:"", gcalEventId:"skip-legacy"},
+    {n:5,  code:25339, titre:"[2D] Enseigner la technologie et la physique-chimie au collège", type:"AFZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-03-08", fin:"2027-03-09", remarques:"", gcalEventId:"skip-legacy"},
+    {n:6,  code:23894, titre:"L'IA au service des personnels administratifs — Niveau 1", type:"AFZ", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"2027-03-22", fin:"2027-03-23", remarques:"", gcalEventId:"skip-legacy"},
+    {n:7,  code:23936, titre:"[2D] Repenser les modalités d'apprentissage avec le numérique : pratiques flexibles, inclusives, efficaces", type:"AFZ", lieu:"Lycée Pierre Loti", debut:"2027-04-05", fin:"2027-04-06", remarques:"", gcalEventId:"skip-legacy"},
+    {n:8,  code:26989, titre:"Développer les compétences éducatives des assistants d'éducation et pédagogiques", type:"AFIZ", lieu:"Lycée Français de Vienne", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy"},
+    {n:9,  code:26474, titre:"Cybersécurité et réseaux dans les établissements français à l'étranger", type:"AFIZ", lieu:"à déterminer", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
+    {n:10, code:22550, titre:"[EFCHYPRE • 2D] Regroupement inter-CVL Zone Europe du Sud-Est", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-09-28", fin:"2026-09-29", remarques:"", gcalEventId:"skip-legacy"},
+    {n:11, code:26588, titre:"[EFCHYPRE] Climat scolaire et programme pHARe : prévention et traitement du harcèlement", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-11-09", fin:"2026-11-10", remarques:"", gcalEventId:"skip-legacy"},
+    {n:12, code:26587, titre:"[EFCHYPRE] Technologie et numérique : Fab Lab et usages pédagogiques du numérique et de l'IA", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2027-02-04", fin:"2027-02-05", remarques:"", gcalEventId:"skip-legacy"},
+    {n:13, code:26698, titre:"[buc-ADN] Formation à l'utilisation d'un fablab", type:"AFE", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
+    {n:14, code:25983, titre:"[LFISV] AFE Technologie pour le projet Innov Campus", type:"AFE", lieu:"Lycée français international Simone-Veil, Düsseldorf", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy"},
+    {n:15, code:27748, titre:"[Jules Verne, Riga] Structurer les projets en technologie : interdisciplinarité, interdegrés, robotique", type:"AFE", lieu:"Lycée Français International Jules Verne, Riga", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
+    {n:16, code:23678, titre:"Regroupement 1 des enseignants formateurs des 1er et 2d degrés de la ZECO", type:"Formation/Seminaire", lieu:"Lycée francais de Bratislava", debut:"2026-12-02", fin:"2026-12-03", remarques:"", gcalEventId:"skip-legacy"},
+    {n:17, code:25322, titre:"Les outils numériques des formateurs : Magistère 2, ÉLÉA, IA", type:"Formation/Seminaire", lieu:"Bruxelles", debut:"2026-09-17", fin:"2026-09-18", remarques:"", gcalEventId:"skip-legacy"},
+    {n:18, code:25397, titre:"Séminaire des EF2D de Technologie", type:"Formation/Seminaire", lieu:"Siège AEFE, Paris", debut:"2026-12-02", fin:"2026-12-04", remarques:"", gcalEventId:"skip-legacy"}
   ];
 
   const DEFAULT_VACANCES = [
@@ -483,6 +503,15 @@
       if(data && data.data){
         formations = data.data.formations || clone(DEFAULT_FORMATIONS);
         vacances = data.data.vacances || clone(DEFAULT_VACANCES);
+        if(!data.data.gcalMigrated){
+          // migration ponctuelle : les formations deja presentes ne sont pas
+          // envoyees automatiquement vers Google Agenda, seules les nouvelles le seront
+          formations.forEach(f=>{ if(!f.gcalEventId) f.gcalEventId = 'skip-legacy'; });
+          gcalMigrated = true;
+          scheduleSave();
+        } else {
+          gcalMigrated = true;
+        }
       }
       setStatus('online', 'Connecté — synchronisé');
     }catch(err){
@@ -503,7 +532,7 @@
     savingLocallyUntil = Date.now() + 4000;
     try{
       const { error } = await sb.from('planning_state')
-        .update({ data: { formations, vacances }, updated_at: new Date().toISOString() })
+        .update({ data: { formations, vacances, gcalMigrated }, updated_at: new Date().toISOString() })
         .eq('id', 1);
       if(error) throw error;
       setStatus('online', 'Connecté — synchronisé');
@@ -529,6 +558,98 @@
         })
       .subscribe();
   }
+
+  // ---------------------------------------------------------------
+  // Google Agenda (OAuth côté client — écrit dans le calendrier
+  // personnel de la personne connectée, indépendamment de Supabase)
+  // ---------------------------------------------------------------
+  function initGoogleAuth(){
+    if(!GOOGLE_CONFIGURED || !window.google || !google.accounts) return;
+    googleTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      callback: (resp)=>{
+        if(resp.error){ toast("Connexion Google refusée"); return; }
+        googleAccessToken = resp.access_token;
+        updateGoogleButton();
+        toast("Google Agenda connecté pour cette session");
+      }
+    });
+  }
+  function updateGoogleButton(){
+    const btn = document.getElementById('btnGoogle');
+    if(!btn) return;
+    if(!GOOGLE_CONFIGURED){
+      btn.textContent = '📅 Google Agenda non configuré';
+    } else if(googleAccessToken){
+      btn.textContent = '📅 Agenda connecté';
+      btn.classList.add('google-on');
+    } else {
+      btn.textContent = '📅 Connecter Google Agenda';
+      btn.classList.remove('google-on');
+    }
+  }
+  function connectGoogle(){
+    if(!GOOGLE_CONFIGURED){
+      alert("Google Agenda n'est pas encore configuré dans ce fichier (voir GOOGLE_CLIENT_ID).");
+      return;
+    }
+    if(!googleTokenClient) initGoogleAuth();
+    if(googleTokenClient) googleTokenClient.requestAccessToken();
+  }
+
+  function fmtISODate(d){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function addOneDay(iso){
+    const d = parseISO(iso);
+    d.setDate(d.getDate()+1);
+    return fmtISODate(d);
+  }
+
+  async function pushToGoogleCalendar(f, isUpdate){
+    if(!googleAccessToken){ toast("Connecte d'abord Google Agenda"); return; }
+    const event = {
+      summary: `F${f.n} — ${f.titre}`,
+      location: f.lieu || '',
+      description: [TYPE_LABELS[f.type]||f.type, f.remarques].filter(Boolean).join('\n'),
+      start: { date: f.debut },
+      end: { date: addOneDay(f.fin) }
+    };
+    const url = isUpdate
+      ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${f.gcalEventId}`
+      : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
+    try{
+      const res = await fetch(url, {
+        method: isUpdate ? 'PATCH' : 'POST',
+        headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(event)
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erreur Google Agenda');
+      if(!isUpdate){
+        f.gcalEventId = data.id;
+        scheduleSave();
+      }
+      renderFormTable();
+      toast(isUpdate ? "Événement Google Agenda mis à jour" : "Ajouté à Google Agenda");
+    }catch(err){
+      console.error(err);
+      toast("Échec de l'envoi vers Google Agenda");
+    }
+  }
+
+  function scheduleGcalSync(f){
+    clearTimeout(gcalTimers.get(f.n));
+    gcalTimers.set(f.n, setTimeout(()=>{
+      if(!googleAccessToken) return;
+      if(!f.titre || !f.debut || !f.fin) return;
+      if(f.gcalEventId === 'skip-legacy') return;
+      pushToGoogleCalendar(f, !!f.gcalEventId);
+    }, 900));
+  }
+
   function parseISO(s){ if(!s) return null; const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
   function inRange(d, a, b){ if(!a||!b) return false; return d>=a && d<=b; }
   function fmtFR(iso){ if(!iso) return ""; const d=parseISO(iso); return d.toLocaleDateString('fr-FR'); }
@@ -799,7 +920,7 @@
       const arrow = active ? (sortDir==='asc' ? ' ▲' : ' ▼') : '';
       html += `<th${col.width?` style="width:${col.width}px;"`:''} data-field="${col.field}" class="${active?'sorted':''}">${col.label}${arrow}</th>`;
     });
-    html += '<th style="width:34px;"></th></tr>';
+    html += '<th style="width:90px;">Agenda</th><th style="width:34px;"></th></tr>';
     thead.innerHTML = html;
     thead.querySelectorAll('th[data-field]').forEach(th=>{
       th.addEventListener('click', ()=>{
@@ -818,6 +939,9 @@
     const view = getVisibleFormations();
     view.forEach(f=>{
       const idx = formations.indexOf(f);
+      const synced = f.gcalEventId && f.gcalEventId !== 'skip-legacy';
+      const gcalLabel = synced ? '✓ Google' : '→ Google';
+      const gcalTitle = synced ? "Mettre à jour l'événement Google Agenda" : "Ajouter à Google Agenda";
       const tr = document.createElement('tr');
       tr.dataset.n = f.n;
       tr.innerHTML = `
@@ -829,8 +953,18 @@
         <td><input type="date" data-field="debut" value="${f.debut||''}"></td>
         <td><input type="date" data-field="fin" value="${f.fin||''}"></td>
         <td><input type="text" data-field="remarques" value="${escapeHtml(f.remarques||'')}" placeholder="—"></td>
+        <td><button class="gcal-btn ${synced?'synced':''}" data-action="gcal" title="${gcalTitle}">${gcalLabel}</button></td>
         <td class="col-del"><button class="del-btn" title="Supprimer">✕</button></td>
       `;
+      tr.querySelector('[data-action="gcal"]').addEventListener('click', ()=>{
+        if(!ensureUnlocked()) return;
+        if(!f.titre || !f.debut || !f.fin){
+          alert("Renseigne le titre et les deux dates avant d'envoyer vers Google Agenda.");
+          return;
+        }
+        if(!googleAccessToken){ connectGoogle(); return; }
+        pushToGoogleCalendar(f, synced);
+      });
       tr.querySelectorAll('[data-field]').forEach(inp=>{
         inp.addEventListener('focus', ()=>{
           if(!ensureUnlocked()) inp.blur();
@@ -840,6 +974,7 @@
           formations[idx][inp.dataset.field] = inp.value;
           renderViews();
           scheduleSave();
+          scheduleGcalSync(formations[idx]);
         });
       });
       tr.querySelector('.del-btn').addEventListener('click', ()=>{
@@ -921,6 +1056,7 @@
     renderAll();
     toast("Planning rechargé depuis le serveur");
   });
+  document.getElementById('btnGoogle').addEventListener('click', connectGoogle);
 
   // ---------------------------------------------------------------
   // Bascule de vue
@@ -950,6 +1086,8 @@
 
   (async function init(){
     renderAll(); // affichage immédiat avec les données par défaut le temps de charger
+    updateGoogleButton();
+    initGoogleAuth();
     await loadState();
     renderAll();
     subscribeRealtime();
