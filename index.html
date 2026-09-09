@@ -288,9 +288,59 @@
     border-top:1px solid var(--line); margin-top:30px;
   }
 
-  @media (max-width:640px){
+  @media (max-width:720px){
     .frise-label{flex-basis:88px; font-size:11px;}
     .toolbar{flex-direction:column; align-items:flex-start;}
+  }
+
+  /* ================================================================
+     MOBILE : tableaux en "cartes" empilées + confort tactile
+     ================================================================ */
+  @media (max-width:720px){
+    body{font-size:15px;}
+    header.masthead{padding:20px 16px 16px;}
+    h1{font-size:26px;}
+    main{padding:18px 12px 0;}
+    .toolbar{padding:10px 12px;}
+    .actions{width:100%; flex-wrap:wrap;}
+    .actions .btn, .actions .status{flex:0 0 auto;}
+    #searchFormations{max-width:none; font-size:16px;} /* 16px : évite le zoom auto iOS */
+    .table-toolbar{width:100%;}
+    .col-panel{left:auto; right:0;}
+
+    /* la frise reste scrollable horizontalement, le calendrier passe en 1 colonne */
+    .cal-grid{grid-template-columns:1fr;}
+
+    /* --- Transformation des tableaux en cartes --- */
+    table.editor, table.editor tbody, table.editor tr, table.editor td{ display:block; width:100%; }
+    table.editor thead{ display:none; }
+    table.editor{ table-layout:auto; }
+    table.editor tr{
+      border:1px solid var(--line); border-radius:6px; margin-bottom:10px; padding:6px 0;
+      background:var(--paper) !important; height:auto !important;
+    }
+    table.editor tr:nth-child(even){ background:var(--paper) !important; }
+    table.editor td{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:7px 12px !important; border-bottom:1px solid var(--line-soft);
+      position:static !important; background:transparent !important; box-shadow:none !important;
+    }
+    table.editor tr td:last-child{ border-bottom:none; }
+    table.editor td[data-label]::before{
+      content:attr(data-label); font-weight:600; font-size:11.5px; color:var(--ink-soft);
+      flex:0 0 auto; margin-right:8px;
+    }
+    table.editor td[data-label=""]::before{ content:none; }
+    table.editor td.col-n{ background:var(--alt) !important; font-weight:700; border-radius:5px 5px 0 0; }
+    table.editor td[data-col="titre"]{ font-weight:600; }
+    table.editor input, table.editor select{
+      font-size:16px; max-width:60%; margin-left:auto;
+    }
+    table.editor input[type="date"], table.editor input[type="time"], table.editor input[data-field="code"]{
+      text-align:right;
+    }
+    table.editor td.col-del{ justify-content:flex-end; }
+    table.editor td.col-del::before{ content:none; }
   }
 </style>
 </head>
@@ -1014,18 +1064,18 @@
       const tr = document.createElement('tr');
       tr.dataset.n = f.n;
       tr.innerHTML = `
-        <td class="col-n">${f.n}</td>
-        <td data-col="titre"><input type="text" data-field="titre" value="${escapeHtml(f.titre||'')}" title="${escapeHtml(f.titre||'')}"></td>
-        <td data-col="code"><input type="text" data-field="code" value="${f.code||''}"></td>
-        <td class="col-type" data-col="type"><select data-field="type">${typeOptions(f.type)}</select></td>
-        <td data-col="lieu"><input type="text" data-field="lieu" value="${escapeHtml(f.lieu||'')}"></td>
-        <td data-col="debut"><input type="date" data-field="debut" value="${f.debut||''}"></td>
-        <td data-col="heureDebut"><input type="time" data-field="heureDebut" value="${f.heureDebut||''}"></td>
-        <td data-col="fin"><input type="date" data-field="fin" value="${f.fin||''}"></td>
-        <td data-col="heureFin"><input type="time" data-field="heureFin" value="${f.heureFin||''}"></td>
-        <td data-col="remarques"><input type="text" data-field="remarques" value="${escapeHtml(f.remarques||'')}" placeholder="—"></td>
-        <td data-col="agenda"><button class="gcal-btn ${synced?'synced':''}" data-action="gcal" title="${gcalTitle}">${gcalLabel}</button></td>
-        <td class="col-del"><button class="del-btn" title="Supprimer">✕</button></td>
+        <td class="col-n" data-label="N°">${f.n}</td>
+        <td data-col="titre" data-label="Formation"><input type="text" data-field="titre" value="${escapeHtml(f.titre||'')}" title="${escapeHtml(f.titre||'')}"></td>
+        <td data-col="code" data-label="Code"><input type="text" data-field="code" value="${f.code||''}"></td>
+        <td class="col-type" data-col="type" data-label="Type"><select data-field="type">${typeOptions(f.type)}</select></td>
+        <td data-col="lieu" data-label="Lieu"><input type="text" data-field="lieu" value="${escapeHtml(f.lieu||'')}"></td>
+        <td data-col="debut" data-label="Début"><input type="date" data-field="debut" value="${f.debut||''}"></td>
+        <td data-col="heureDebut" data-label="Heure début"><input type="time" data-field="heureDebut" value="${f.heureDebut||''}"></td>
+        <td data-col="fin" data-label="Fin"><input type="date" data-field="fin" value="${f.fin||''}"></td>
+        <td data-col="heureFin" data-label="Heure fin"><input type="time" data-field="heureFin" value="${f.heureFin||''}"></td>
+        <td data-col="remarques" data-label="Remarques"><input type="text" data-field="remarques" value="${escapeHtml(f.remarques||'')}" placeholder="—"></td>
+        <td data-col="agenda" data-label="Agenda"><button class="gcal-btn ${synced?'synced':''}" data-action="gcal" title="${gcalTitle}">${gcalLabel}</button></td>
+        <td class="col-del" data-label=""><button class="del-btn" title="Supprimer">✕</button></td>
       `;
       tr.querySelector('[data-action="gcal"]').addEventListener('click', ()=>{
         if(!ensureUnlocked()) return;
@@ -1087,14 +1137,14 @@
     vacances.forEach((v, idx)=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input type="text" data-field="label" value="${escapeHtml(v.label||'')}"></td>
-        <td><select data-field="cat">
+        <td data-label="Période"><input type="text" data-field="label" value="${escapeHtml(v.label||'')}"></td>
+        <td data-label="Catégorie"><select data-field="cat">
               <option value="Vacances" ${v.cat==='Vacances'?'selected':''}>Vacances</option>
               <option value="Férié" ${v.cat==='Férié'?'selected':''}>Férié</option>
             </select></td>
-        <td><input type="date" data-field="debut" value="${v.debut||''}"></td>
-        <td><input type="date" data-field="fin" value="${v.fin||''}"></td>
-        <td class="col-del"><button class="del-btn" title="Supprimer">✕</button></td>
+        <td data-label="Début"><input type="date" data-field="debut" value="${v.debut||''}"></td>
+        <td data-label="Fin"><input type="date" data-field="fin" value="${v.fin||''}"></td>
+        <td class="col-del" data-label=""><button class="del-btn" title="Supprimer">✕</button></td>
       `;
       tr.querySelectorAll('[data-field]').forEach(inp=>{
         inp.addEventListener('focus', ()=>{
