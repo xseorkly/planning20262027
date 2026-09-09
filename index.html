@@ -105,6 +105,7 @@
   .btn.primary{background:var(--ink); color:var(--bg);}
   .btn.primary:hover{opacity:.85; background:var(--ink);}
   .btn.small{padding:4px 10px; font-size:11.5px;}
+  .btn.active{background:var(--ink); color:var(--bg);}
   .btn.google-on{background:#3F7D6B; color:#fff; border-color:#3F7D6B;}
 
   .gcal-btn{
@@ -221,15 +222,44 @@
   .table-wrap{border:1px solid var(--line); border-radius:4px; overflow:hidden; overflow-x:auto;}
   .table-footer{display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:10px;}
 
-  .table-toolbar{margin-bottom:10px;}
+  .table-toolbar{margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   #searchFormations{
-    font-family:inherit; font-size:13px; padding:8px 12px; width:100%; max-width:360px;
+    font-family:inherit; font-size:13px; padding:8px 12px; width:100%; max-width:320px;
     border:1.5px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink);
   }
   #searchFormations:focus{outline:none; border-color:var(--ink);}
   table.editor th[data-field]{cursor:pointer; user-select:none; white-space:nowrap;}
   table.editor th[data-field]:hover{background:#2A3B5E;}
   table.editor th.sorted{background:#2A3B5E;}
+
+  .col-picker{position:relative;}
+  .col-panel{
+    display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:50;
+    background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:10px 14px;
+    box-shadow:0 6px 18px rgba(30,42,68,.12); min-width:200px;
+  }
+  .col-panel.open{display:block;}
+  .col-panel label{
+    display:flex; align-items:center; gap:8px; font-size:12.5px; padding:4px 0; cursor:pointer; white-space:nowrap;
+  }
+
+  table.editor{table-layout:fixed;}
+  table.editor td, table.editor th{overflow:hidden;}
+  table.editor td[data-col="titre"] input, table.editor th[data-field="titre"]{
+    text-overflow:ellipsis;
+  }
+  table.editor th:nth-child(1), table.editor td:nth-child(1),
+  table.editor th:nth-child(2), table.editor td:nth-child(2){
+    position:sticky; z-index:2; background:var(--paper);
+  }
+  table.editor th:nth-child(1), table.editor td:nth-child(1){ left:0; }
+  table.editor th:nth-child(2), table.editor td:nth-child(2){ left:34px; box-shadow:2px 0 5px rgba(30,42,68,.10); }
+  table.editor thead th:nth-child(1), table.editor thead th:nth-child(2){ z-index:3; background:var(--ink); }
+  table.editor tr:nth-child(even) td:nth-child(1), table.editor tr:nth-child(even) td:nth-child(2){ background:var(--alt); }
+
+  table.editor.compact td, table.editor.compact th{ padding:3px 6px; font-size:12px; }
+  table.editor.compact input, table.editor.compact select{ padding:2px 4px; font-size:11.5px; }
+  table.editor.compact tr{ height:26px; }
 
   .tbd-tag{
     display:inline-block; font-size:10.5px; color:var(--ink-soft); background:var(--line-soft);
@@ -296,9 +326,14 @@
 
   <section class="block">
     <h2 class="block-title">Tableau des formations</h2>
-    <p class="block-note">Triées par date par défaut — clique un en-tête de colonne pour trier autrement, ou cherche un mot-clé ou un code ci-dessous. Les dates laissées vides sont traitées comme « à déterminer ».</p>
+    <p class="block-note">Triées par date par défaut — clique un en-tête de colonne pour trier autrement, ou cherche un mot-clé ou un code ci-dessous. Les dates laissées vides sont traitées comme « à déterminer ». Les colonnes N° et Formation restent visibles quand tu fais défiler le tableau horizontalement.</p>
     <div class="table-toolbar">
       <input type="search" id="searchFormations" placeholder="Rechercher par mot, lieu ou code…">
+      <div class="col-picker">
+        <button class="btn small" id="btnColumns">Colonnes ▾</button>
+        <div class="col-panel" id="colPanel"></div>
+      </div>
+      <button class="btn small" id="btnCompact">Vue compacte</button>
     </div>
     <div class="table-wrap">
       <table class="editor" id="formTable">
@@ -410,24 +445,24 @@
   const WEEKDAYS_FR = ["Lu","Ma","Me","Je","Ve","Sa","Di"];
 
   const DEFAULT_FORMATIONS = [
-    {n:1,  code:23853, titre:"[2D] Du problème technique au projet créatif : enseigner la technologie par projets", type:"AFIZ", lieu:"Lycée français de Riga", debut:"2026-10-08", fin:"2026-10-09", remarques:"", gcalEventId:"skip-legacy"},
-    {n:2,  code:23877, titre:"Le métier de CPE au quotidien : comprendre, agir et coordonner efficacement", type:"AFIZ", lieu:"Lycée Francais de Turin", debut:"2027-01-25", fin:"2027-01-26", remarques:"", gcalEventId:"skip-legacy"},
-    {n:3,  code:23895, titre:"L'IA au service des personnels administratifs — Niveau 2", type:"AFZ", lieu:"Lycée Chateaubriand", debut:"2027-01-11", fin:"2027-01-12", remarques:"", gcalEventId:"skip-legacy"},
-    {n:4,  code:26336, titre:"Enseigner la philosophie en terminale : programme, nouveaux auteurs et IA", type:"AFIZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-02-01", fin:"2027-02-03", remarques:"", gcalEventId:"skip-legacy"},
-    {n:5,  code:25339, titre:"[2D] Enseigner la technologie et la physique-chimie au collège", type:"AFZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-03-08", fin:"2027-03-09", remarques:"", gcalEventId:"skip-legacy"},
-    {n:6,  code:23894, titre:"L'IA au service des personnels administratifs — Niveau 1", type:"AFZ", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"2027-03-22", fin:"2027-03-23", remarques:"", gcalEventId:"skip-legacy"},
-    {n:7,  code:23936, titre:"[2D] Repenser les modalités d'apprentissage avec le numérique : pratiques flexibles, inclusives, efficaces", type:"AFZ", lieu:"Lycée Pierre Loti", debut:"2027-04-05", fin:"2027-04-06", remarques:"", gcalEventId:"skip-legacy"},
-    {n:8,  code:26989, titre:"Développer les compétences éducatives des assistants d'éducation et pédagogiques", type:"AFIZ", lieu:"Lycée Français de Vienne", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy"},
-    {n:9,  code:26474, titre:"Cybersécurité et réseaux dans les établissements français à l'étranger", type:"AFIZ", lieu:"à déterminer", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
-    {n:10, code:22550, titre:"[EFCHYPRE • 2D] Regroupement inter-CVL Zone Europe du Sud-Est", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-09-28", fin:"2026-09-29", remarques:"", gcalEventId:"skip-legacy"},
-    {n:11, code:26588, titre:"[EFCHYPRE] Climat scolaire et programme pHARe : prévention et traitement du harcèlement", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-11-09", fin:"2026-11-10", remarques:"", gcalEventId:"skip-legacy"},
-    {n:12, code:26587, titre:"[EFCHYPRE] Technologie et numérique : Fab Lab et usages pédagogiques du numérique et de l'IA", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2027-02-04", fin:"2027-02-05", remarques:"", gcalEventId:"skip-legacy"},
-    {n:13, code:26698, titre:"[buc-ADN] Formation à l'utilisation d'un fablab", type:"AFE", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
-    {n:14, code:25983, titre:"[LFISV] AFE Technologie pour le projet Innov Campus", type:"AFE", lieu:"Lycée français international Simone-Veil, Düsseldorf", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy"},
-    {n:15, code:27748, titre:"[Jules Verne, Riga] Structurer les projets en technologie : interdisciplinarité, interdegrés, robotique", type:"AFE", lieu:"Lycée Français International Jules Verne, Riga", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy"},
-    {n:16, code:23678, titre:"Regroupement 1 des enseignants formateurs des 1er et 2d degrés de la ZECO", type:"Formation/Seminaire", lieu:"Lycée francais de Bratislava", debut:"2026-12-02", fin:"2026-12-03", remarques:"", gcalEventId:"skip-legacy"},
-    {n:17, code:25322, titre:"Les outils numériques des formateurs : Magistère 2, ÉLÉA, IA", type:"Formation/Seminaire", lieu:"Bruxelles", debut:"2026-09-17", fin:"2026-09-18", remarques:"", gcalEventId:"skip-legacy"},
-    {n:18, code:25397, titre:"Séminaire des EF2D de Technologie", type:"Formation/Seminaire", lieu:"Siège AEFE, Paris", debut:"2026-12-02", fin:"2026-12-04", remarques:"", gcalEventId:"skip-legacy"}
+    {n:1,  code:23853, titre:"[2D] Du problème technique au projet créatif : enseigner la technologie par projets", type:"AFIZ", lieu:"Lycée français de Riga", debut:"2026-10-08", fin:"2026-10-09", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:2,  code:23877, titre:"Le métier de CPE au quotidien : comprendre, agir et coordonner efficacement", type:"AFIZ", lieu:"Lycée Francais de Turin", debut:"2027-01-25", fin:"2027-01-26", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:3,  code:23895, titre:"L'IA au service des personnels administratifs — Niveau 2", type:"AFZ", lieu:"Lycée Chateaubriand", debut:"2027-01-11", fin:"2027-01-12", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:4,  code:26336, titre:"Enseigner la philosophie en terminale : programme, nouveaux auteurs et IA", type:"AFIZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-02-01", fin:"2027-02-03", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:5,  code:25339, titre:"[2D] Enseigner la technologie et la physique-chimie au collège", type:"AFZ", lieu:"Lycée Eugène Delacroix, Athènes", debut:"2027-03-08", fin:"2027-03-09", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:6,  code:23894, titre:"L'IA au service des personnels administratifs — Niveau 1", type:"AFZ", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"2027-03-22", fin:"2027-03-23", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:7,  code:23936, titre:"[2D] Repenser les modalités d'apprentissage avec le numérique : pratiques flexibles, inclusives, efficaces", type:"AFZ", lieu:"Lycée Pierre Loti", debut:"2027-04-05", fin:"2027-04-06", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:8,  code:26989, titre:"Développer les compétences éducatives des assistants d'éducation et pédagogiques", type:"AFIZ", lieu:"Lycée Français de Vienne", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:9,  code:26474, titre:"Cybersécurité et réseaux dans les établissements français à l'étranger", type:"AFIZ", lieu:"à déterminer", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:10, code:22550, titre:"[EFCHYPRE • 2D] Regroupement inter-CVL Zone Europe du Sud-Est", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-09-28", fin:"2026-09-29", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:11, code:26588, titre:"[EFCHYPRE] Climat scolaire et programme pHARe : prévention et traitement du harcèlement", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2026-11-09", fin:"2026-11-10", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:12, code:26587, titre:"[EFCHYPRE] Technologie et numérique : Fab Lab et usages pédagogiques du numérique et de l'IA", type:"AFE", lieu:"École franco-chypriote de Nicosie", debut:"2027-02-04", fin:"2027-02-05", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:13, code:26698, titre:"[buc-ADN] Formation à l'utilisation d'un fablab", type:"AFE", lieu:"Lycée français Anna-de-Noailles, Bucarest", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:14, code:25983, titre:"[LFISV] AFE Technologie pour le projet Innov Campus", type:"AFE", lieu:"Lycée français international Simone-Veil, Düsseldorf", debut:"2026-11-19", fin:"2026-11-20", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:15, code:27748, titre:"[Jules Verne, Riga] Structurer les projets en technologie : interdisciplinarité, interdegrés, robotique", type:"AFE", lieu:"Lycée Français International Jules Verne, Riga", debut:"", fin:"", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:16, code:23678, titre:"Regroupement 1 des enseignants formateurs des 1er et 2d degrés de la ZECO", type:"Formation/Seminaire", lieu:"Lycée francais de Bratislava", debut:"2026-12-02", fin:"2026-12-03", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:17, code:25322, titre:"Les outils numériques des formateurs : Magistère 2, ÉLÉA, IA", type:"Formation/Seminaire", lieu:"Bruxelles", debut:"2026-09-17", fin:"2026-09-18", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""},
+    {n:18, code:25397, titre:"Séminaire des EF2D de Technologie", type:"Formation/Seminaire", lieu:"Siège AEFE, Paris", debut:"2026-12-02", fin:"2026-12-04", remarques:"", gcalEventId:"skip-legacy", heureDebut:"", heureFin:""}
   ];
 
   const DEFAULT_VACANCES = [
@@ -608,15 +643,23 @@
     return fmtISODate(d);
   }
 
+  const EVENT_TIMEZONE = 'Europe/Vienna';
+
   async function pushToGoogleCalendar(f, isUpdate){
     if(!googleAccessToken){ toast("Connecte d'abord Google Agenda"); return; }
+    const hasTimes = !!(f.heureDebut && f.heureFin);
     const event = {
       summary: `F${f.n} — ${f.titre}`,
       location: f.lieu || '',
       description: [TYPE_LABELS[f.type]||f.type, f.remarques].filter(Boolean).join('\n'),
-      start: { date: f.debut },
-      end: { date: addOneDay(f.fin) }
     };
+    if(hasTimes){
+      event.start = { dateTime: `${f.debut}T${f.heureDebut}:00`, timeZone: EVENT_TIMEZONE };
+      event.end = { dateTime: `${f.fin}T${f.heureFin}:00`, timeZone: EVENT_TIMEZONE };
+    } else {
+      event.start = { date: f.debut };
+      event.end = { date: addOneDay(f.fin) };
+    }
     const url = isUpdate
       ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${f.gcalEventId}`
       : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
@@ -712,12 +755,16 @@
   // ---------------------------------------------------------------
   const tooltip = document.getElementById('tooltip');
   function showTooltip(evt, formsArr){
-    const html = formsArr.map(f => `
+    const html = formsArr.map(f => {
+      const debutTxt = f.debut ? fmtFR(f.debut) + (f.heureDebut ? ' ' + f.heureDebut : '') : '?';
+      const finTxt = f.fin ? fmtFR(f.fin) + (f.heureFin ? ' ' + f.heureFin : '') : '?';
+      return `
       <b>F${f.n} — ${escapeHtml(f.titre)}</b>
       <div class="meta">${TYPE_LABELS[f.type]||f.type}<br>${escapeHtml(f.lieu||'')}<br>
-      ${f.debut?fmtFR(f.debut):'?'} → ${f.fin?fmtFR(f.fin):'?'}
+      ${debutTxt} → ${finTxt}
       ${f.remarques ? '<br><em>'+escapeHtml(f.remarques)+'</em>' : ''}</div>
-    `).join('<hr style="border-color:rgba(255,255,255,.2); margin:6px 0;">');
+    `;
+    }).join('<hr style="border-color:rgba(255,255,255,.2); margin:6px 0;">');
     tooltip.innerHTML = html;
     tooltip.style.display = 'block';
     positionTooltip(evt);
@@ -891,14 +938,18 @@
   // Tri & recherche
   // ---------------------------------------------------------------
   const FORM_COLUMNS = [
+    {field:'titre', label:'Formation', width:240},
     {field:'code', label:'Code', width:80},
-    {field:'titre', label:'Formation', width:null},
     {field:'type', label:'Type', width:160},
     {field:'lieu', label:'Lieu', width:220},
-    {field:'debut', label:'Début', width:120},
-    {field:'fin', label:'Fin', width:120},
+    {field:'debut', label:'Début', width:115},
+    {field:'heureDebut', label:'Heure début', width:90},
+    {field:'fin', label:'Fin', width:115},
+    {field:'heureFin', label:'Heure fin', width:90},
     {field:'remarques', label:'Remarques', width:200}
   ];
+  const TOGGLEABLE_FIELDS = FORM_COLUMNS.filter(c=>c.field!=='titre').map(c=>c.field).concat(['agenda']);
+  let hiddenColumns = new Set();
 
   function matchesSearch(f, q){
     if(!q) return true;
@@ -936,9 +987,9 @@
     FORM_COLUMNS.forEach(col=>{
       const active = sortField===col.field;
       const arrow = active ? (sortDir==='asc' ? ' ▲' : ' ▼') : '';
-      html += `<th${col.width?` style="width:${col.width}px;"`:''} data-field="${col.field}" class="${active?'sorted':''}">${col.label}${arrow}</th>`;
+      html += `<th${col.width?` style="width:${col.width}px;"`:''} data-field="${col.field}" data-col="${col.field}" class="${active?'sorted':''}" title="${escapeHtml(col.label)}">${col.label}${arrow}</th>`;
     });
-    html += '<th style="width:90px;">Agenda</th><th style="width:34px;"></th></tr>';
+    html += '<th style="width:90px;" data-col="agenda">Agenda</th><th style="width:34px;"></th></tr>';
     thead.innerHTML = html;
     thead.querySelectorAll('th[data-field]').forEach(th=>{
       th.addEventListener('click', ()=>{
@@ -964,14 +1015,16 @@
       tr.dataset.n = f.n;
       tr.innerHTML = `
         <td class="col-n">${f.n}</td>
-        <td><input type="text" data-field="code" value="${f.code||''}"></td>
-        <td><input type="text" data-field="titre" value="${escapeHtml(f.titre||'')}"></td>
-        <td class="col-type"><select data-field="type">${typeOptions(f.type)}</select></td>
-        <td><input type="text" data-field="lieu" value="${escapeHtml(f.lieu||'')}"></td>
-        <td><input type="date" data-field="debut" value="${f.debut||''}"></td>
-        <td><input type="date" data-field="fin" value="${f.fin||''}"></td>
-        <td><input type="text" data-field="remarques" value="${escapeHtml(f.remarques||'')}" placeholder="—"></td>
-        <td><button class="gcal-btn ${synced?'synced':''}" data-action="gcal" title="${gcalTitle}">${gcalLabel}</button></td>
+        <td data-col="titre"><input type="text" data-field="titre" value="${escapeHtml(f.titre||'')}" title="${escapeHtml(f.titre||'')}"></td>
+        <td data-col="code"><input type="text" data-field="code" value="${f.code||''}"></td>
+        <td class="col-type" data-col="type"><select data-field="type">${typeOptions(f.type)}</select></td>
+        <td data-col="lieu"><input type="text" data-field="lieu" value="${escapeHtml(f.lieu||'')}"></td>
+        <td data-col="debut"><input type="date" data-field="debut" value="${f.debut||''}"></td>
+        <td data-col="heureDebut"><input type="time" data-field="heureDebut" value="${f.heureDebut||''}"></td>
+        <td data-col="fin"><input type="date" data-field="fin" value="${f.fin||''}"></td>
+        <td data-col="heureFin"><input type="time" data-field="heureFin" value="${f.heureFin||''}"></td>
+        <td data-col="remarques"><input type="text" data-field="remarques" value="${escapeHtml(f.remarques||'')}" placeholder="—"></td>
+        <td data-col="agenda"><button class="gcal-btn ${synced?'synced':''}" data-action="gcal" title="${gcalTitle}">${gcalLabel}</button></td>
         <td class="col-del"><button class="del-btn" title="Supprimer">✕</button></td>
       `;
       tr.querySelector('[data-action="gcal"]').addEventListener('click', ()=>{
@@ -1016,6 +1069,16 @@
     document.getElementById('formCount').textContent = searchQuery.trim()
       ? `${shown} formation${shown>1?'s':''} sur ${total}`
       : `${total} formation${total>1?'s':''}`;
+    applyColumnVisibility();
+  }
+
+  function applyColumnVisibility(){
+    TOGGLEABLE_FIELDS.forEach(field=>{
+      const hidden = hiddenColumns.has(field);
+      document.querySelectorAll(`[data-col="${field}"]`).forEach(el=>{
+        el.style.display = hidden ? 'none' : '';
+      });
+    });
   }
 
   function renderVacTable(){
@@ -1065,9 +1128,43 @@
     searchQuery = e.target.value;
     renderFormTable();
   });
+
+  function renderColumnPanel(){
+    const panel = document.getElementById('colPanel');
+    const labels = {};
+    FORM_COLUMNS.forEach(c=>{ if(c.field!=='titre') labels[c.field] = c.label; });
+    labels['agenda'] = 'Agenda';
+    panel.innerHTML = TOGGLEABLE_FIELDS.map(f=>`
+      <label><input type="checkbox" data-toggle-col="${f}" ${hiddenColumns.has(f)?'':'checked'}> ${labels[f]}</label>
+    `).join('');
+    panel.querySelectorAll('[data-toggle-col]').forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        const f = cb.dataset.toggleCol;
+        if(cb.checked) hiddenColumns.delete(f); else hiddenColumns.add(f);
+        applyColumnVisibility();
+      });
+    });
+  }
+  renderColumnPanel();
+
+  document.getElementById('btnColumns').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.getElementById('colPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{
+    const panel = document.getElementById('colPanel');
+    if(panel && !panel.contains(e.target) && e.target.id!=='btnColumns'){
+      panel.classList.remove('open');
+    }
+  });
+  document.getElementById('btnCompact').addEventListener('click', (e)=>{
+    document.getElementById('formTable').classList.toggle('compact');
+    e.target.classList.toggle('active');
+  });
+
   document.getElementById('btnAddFormation').addEventListener('click', ()=>{
     if(!ensureUnlocked()) return;
-    formations.push({n:nextN(), code:'', titre:'Nouvelle formation', type:'AFZ', lieu:'', debut:'', fin:'', remarques:''});
+    formations.push({n:nextN(), code:'', titre:'Nouvelle formation', type:'AFZ', lieu:'', debut:'', fin:'', heureDebut:'', heureFin:'', remarques:''});
     renderAll();
     scheduleSave();
   });
