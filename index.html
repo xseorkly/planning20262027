@@ -261,6 +261,9 @@
   table.editor.compact input, table.editor.compact select{ padding:2px 4px; font-size:11.5px; }
   table.editor.compact tr{ height:26px; }
 
+  table.editor tr.row-past{ opacity:.5; }
+  table.editor tr.row-past:hover{ opacity:.75; }
+
   .tbd-tag{
     display:inline-block; font-size:10.5px; color:var(--ink-soft); background:var(--line-soft);
     padding:2px 6px; border-radius:3px;
@@ -288,59 +291,9 @@
     border-top:1px solid var(--line); margin-top:30px;
   }
 
-  @media (max-width:720px){
+  @media (max-width:640px){
     .frise-label{flex-basis:88px; font-size:11px;}
     .toolbar{flex-direction:column; align-items:flex-start;}
-  }
-
-  /* ================================================================
-     MOBILE : tableaux en "cartes" empilées + confort tactile
-     ================================================================ */
-  @media (max-width:720px){
-    body{font-size:15px;}
-    header.masthead{padding:20px 16px 16px;}
-    h1{font-size:26px;}
-    main{padding:18px 12px 0;}
-    .toolbar{padding:10px 12px;}
-    .actions{width:100%; flex-wrap:wrap;}
-    .actions .btn, .actions .status{flex:0 0 auto;}
-    #searchFormations{max-width:none; font-size:16px;} /* 16px : évite le zoom auto iOS */
-    .table-toolbar{width:100%;}
-    .col-panel{left:auto; right:0;}
-
-    /* la frise reste scrollable horizontalement, le calendrier passe en 1 colonne */
-    .cal-grid{grid-template-columns:1fr;}
-
-    /* --- Transformation des tableaux en cartes --- */
-    table.editor, table.editor tbody, table.editor tr, table.editor td{ display:block; width:100%; }
-    table.editor thead{ display:none; }
-    table.editor{ table-layout:auto; }
-    table.editor tr{
-      border:1px solid var(--line); border-radius:6px; margin-bottom:10px; padding:6px 0;
-      background:var(--paper) !important; height:auto !important;
-    }
-    table.editor tr:nth-child(even){ background:var(--paper) !important; }
-    table.editor td{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding:7px 12px !important; border-bottom:1px solid var(--line-soft);
-      position:static !important; background:transparent !important; box-shadow:none !important;
-    }
-    table.editor tr td:last-child{ border-bottom:none; }
-    table.editor td[data-label]::before{
-      content:attr(data-label); font-weight:600; font-size:11.5px; color:var(--ink-soft);
-      flex:0 0 auto; margin-right:8px;
-    }
-    table.editor td[data-label=""]::before{ content:none; }
-    table.editor td.col-n{ background:var(--alt) !important; font-weight:700; border-radius:5px 5px 0 0; }
-    table.editor td[data-col="titre"]{ font-weight:600; }
-    table.editor input, table.editor select{
-      font-size:16px; max-width:60%; margin-left:auto;
-    }
-    table.editor input[type="date"], table.editor input[type="time"], table.editor input[data-field="code"]{
-      text-align:right;
-    }
-    table.editor td.col-del{ justify-content:flex-end; }
-    table.editor td.col-del::before{ content:none; }
   }
 </style>
 </head>
@@ -696,7 +649,7 @@
   const EVENT_TIMEZONE = 'Europe/Vienna';
 
   async function pushToGoogleCalendar(f, isUpdate){
-    if(!googleAccessToken){ toast("Connecte d'abord Google Agenda"); return; }
+    if(!googleAccessToken){ toast("Google Agenda non connecté — modification non envoyée"); return; }
     const hasTimes = !!(f.heureDebut && f.heureFin);
     const event = {
       summary: `F${f.n} — ${f.titre}`,
@@ -719,8 +672,14 @@
         headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(event)
       });
+      if(res.status===401){
+        googleAccessToken = null;
+        updateGoogleButton();
+        toast("Session Google Agenda expirée — reconnecte-toi (bouton en haut)");
+        return;
+      }
       const data = await res.json();
-      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erreur Google Agenda');
+      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erreur Google Agenda (code ' + res.status + ')');
       if(!isUpdate){
         f.gcalEventId = data.id;
         scheduleSave();
@@ -729,7 +688,7 @@
       toast(isUpdate ? "Événement Google Agenda mis à jour" : "Ajouté à Google Agenda");
     }catch(err){
       console.error(err);
-      toast("Échec de l'envoi vers Google Agenda");
+      toast("Échec de l'envoi vers Google Agenda : " + err.message);
     }
   }
 
@@ -740,6 +699,12 @@
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${googleAccessToken}` }
       });
+      if(res.status===401){
+        googleAccessToken = null;
+        updateGoogleButton();
+        toast("Session Google Agenda expirée — reconnecte-toi (bouton en haut)");
+        return;
+      }
       // 204 = supprimé ; 404/410 = déjà absent côté Google, on considère que c'est bon
       if(!res.ok && res.status!==404 && res.status!==410){
         throw new Error('Erreur suppression Google Agenda (code ' + res.status + ')');
@@ -747,16 +712,19 @@
       toast("Événement retiré de Google Agenda");
     }catch(err){
       console.error(err);
-      toast("Impossible de supprimer l'événement dans Google Agenda");
+      toast("Impossible de supprimer l'événement dans Google Agenda : " + err.message);
     }
   }
 
   function scheduleGcalSync(f){
     clearTimeout(gcalTimers.get(f.n));
     gcalTimers.set(f.n, setTimeout(()=>{
-      if(!googleAccessToken) return;
-      if(!f.titre || !f.debut || !f.fin) return;
-      if(f.gcalEventId === 'skip-legacy') return;
+      if(f.gcalEventId === 'skip-legacy') return; // formation jamais reliée à Google (comportement voulu)
+      if(!f.titre || !f.debut || !f.fin) return;  // pas encore assez d'infos pour créer l'événement
+      if(!googleAccessToken){
+        toast("Google Agenda non connecté — modification non envoyée");
+        return;
+      }
       pushToGoogleCalendar(f, !!f.gcalEventId);
     }, 900));
   }
@@ -764,6 +732,12 @@
   function parseISO(s){ if(!s) return null; const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
   function inRange(d, a, b){ if(!a||!b) return false; return d>=a && d<=b; }
   function fmtFR(iso){ if(!iso) return ""; const d=parseISO(iso); return d.toLocaleDateString('fr-FR'); }
+  function isPastFormation(f){
+    if(!f.fin) return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const fin = parseISO(f.fin);
+    return fin < today;
+  }
 
   // ---------------------------------------------------------------
   // Légende
@@ -1063,6 +1037,7 @@
       const gcalTitle = synced ? "Mettre à jour l'événement Google Agenda" : "Ajouter à Google Agenda";
       const tr = document.createElement('tr');
       tr.dataset.n = f.n;
+      if(isPastFormation(f)) tr.classList.add('row-past');
       tr.innerHTML = `
         <td class="col-n" data-label="N°">${f.n}</td>
         <td data-col="titre" data-label="Formation"><input type="text" data-field="titre" value="${escapeHtml(f.titre||'')}" title="${escapeHtml(f.titre||'')}"></td>
@@ -1096,6 +1071,7 @@
           renderViews();
           scheduleSave();
           scheduleGcalSync(formations[idx]);
+          tr.classList.toggle('row-past', isPastFormation(formations[idx]));
         });
       });
       tr.querySelector('.del-btn').addEventListener('click', ()=>{
